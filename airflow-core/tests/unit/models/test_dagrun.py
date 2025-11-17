@@ -43,7 +43,7 @@ from airflow.models.taskreschedule import TaskReschedule
 from airflow.providers.standard.operators.bash import BashOperator
 from airflow.providers.standard.operators.empty import EmptyOperator
 from airflow.providers.standard.operators.python import PythonOperator, ShortCircuitOperator
-from airflow.sdk import DAG, BaseOperator, setup, task, task_group, teardown
+from airflow.sdk import DAG, BaseOperator, get_current_context, setup, task, task_group, teardown
 from airflow.sdk.definitions.deadline import AsyncCallback, DeadlineAlert, DeadlineReference
 from airflow.serialization.serialized_objects import LazyDeserializedDAG, SerializedDAG
 from airflow.stats import Stats
@@ -911,7 +911,7 @@ class TestDagRun:
         assert task.queue == "queue1"
 
     @pytest.mark.parametrize(
-        "prev_ti_state, is_ti_schedulable",
+        ("prev_ti_state", "is_ti_schedulable"),
         [
             (TaskInstanceState.SUCCESS, True),
             (TaskInstanceState.SKIPPED, True),
@@ -953,7 +953,7 @@ class TestDagRun:
         assert ("test_dop_task" in schedulable_tis) == is_ti_schedulable
 
     @pytest.mark.parametrize(
-        "prev_ti_state, is_ti_schedulable",
+        ("prev_ti_state", "is_ti_schedulable"),
         [
             (TaskInstanceState.SUCCESS, True),
             (TaskInstanceState.SKIPPED, True),
@@ -1078,7 +1078,7 @@ class TestDagRun:
         assert call(f"dagrun.{dag.dag_id}.first_task_scheduling_delay") not in stats_mock.mock_calls
 
     @pytest.mark.parametrize(
-        "schedule, expected",
+        ("schedule", "expected"),
         [
             ("*/5 * * * *", True),
             (None, False),
@@ -2175,9 +2175,9 @@ def test_schedulable_task_exist_when_rerun_removed_upstream_mapped_task(session,
             ti.map_index = 0
             task = ti.task
             for map_index in range(1, 5):
-                ti = TI(task, run_id=dr.run_id, map_index=map_index, dag_version_id=ti.dag_version_id)
-                session.add(ti)
-                ti.dag_run = dr
+                ti_new = TI(task, run_id=dr.run_id, map_index=map_index, dag_version_id=ti.dag_version_id)
+                session.add(ti_new)
+                ti_new.dag_run = dr
         else:
             # run tasks "do_something" to get XCOMs for correct downstream length
             ti.run()
@@ -2199,7 +2199,7 @@ def test_schedulable_task_exist_when_rerun_removed_upstream_mapped_task(session,
 
 
 @pytest.mark.parametrize(
-    "partial_params, mapped_params, expected",
+    ("partial_params", "mapped_params", "expected"),
     [
         pytest.param(None, [{"a": 1}], 1, id="simple"),
         pytest.param({"b": 2}, [{"a": 1}], 1, id="merge"),
@@ -2251,6 +2251,59 @@ def test_mapped_task_group_expands(dag_maker, session):
         ("tg.task_2", 4, None),
         ("tg.task_2", 5, None),
     }
+
+
+@pytest.mark.parametrize("rerun_length", [0, 1, 2, 3])
+def test_mapped_task_rerun_with_different_length_of_args(session, dag_maker, rerun_length):
+    @task
+    def generate_mapping_args():
+        context = get_current_context()
+        if context["ti"].try_number == 0:
+            args = [i for i in range(2)]
+        else:
+            args = [i for i in range(rerun_length)]
+        return args
+
+    @task
+    def mapped_print_value(arg):
+        return arg
+
+    with dag_maker(session=session):
+        args = generate_mapping_args()
+        mapped_print_value.expand(arg=args)
+
+    # First Run
+    dr = dag_maker.create_dagrun()
+    dag_maker.run_ti("generate_mapping_args", dr)
+
+    decision = dr.task_instance_scheduling_decisions(session=session)
+    for ti in decision.schedulable_tis:
+        dag_maker.run_ti(ti.task_id, dr, map_index=ti.map_index)
+
+    clear_task_instances(dr.get_task_instances(), session=session)
+
+    # Second Run
+    ti = dr.get_task_instance(task_id="generate_mapping_args", session=session)
+    ti.try_number += 1
+    session.merge(ti)
+    dag_maker.run_ti("generate_mapping_args", dr)
+
+    # Check if the new mapped task instances are correctly scheduled
+    decision = dr.task_instance_scheduling_decisions(session=session)
+    assert len(decision.schedulable_tis) == rerun_length
+    assert all([ti.task_id == "mapped_print_value" for ti in decision.schedulable_tis])
+
+    # Check if mapped task rerun successfully
+    for ti in decision.schedulable_tis:
+        dag_maker.run_ti(ti.task_id, dr, map_index=ti.map_index)
+    query = select(TI).where(
+        TI.dag_id == dr.dag_id,
+        TI.run_id == dr.run_id,
+        TI.task_id == "mapped_print_value",
+        TI.state == TaskInstanceState.SUCCESS,
+    )
+    success_tis = session.execute(query).all()
+    assert len(success_tis) == rerun_length
 
 
 def test_operator_mapped_task_group_receives_value(dag_maker, session):
@@ -2521,7 +2574,7 @@ def test_dagrun_with_note(dag_maker, session):
 
 
 @pytest.mark.parametrize(
-    "dag_run_state, on_failure_fail_dagrun", [[DagRunState.SUCCESS, False], [DagRunState.FAILED, True]]
+    ("dag_run_state", "on_failure_fail_dagrun"), [[DagRunState.SUCCESS, False], [DagRunState.FAILED, True]]
 )
 def test_teardown_failure_behaviour_on_dagrun(dag_maker, session, dag_run_state, on_failure_fail_dagrun):
     with dag_maker():
@@ -2551,7 +2604,7 @@ def test_teardown_failure_behaviour_on_dagrun(dag_maker, session, dag_run_state,
 
 
 @pytest.mark.parametrize(
-    "dag_run_state, on_failure_fail_dagrun", [[DagRunState.SUCCESS, False], [DagRunState.FAILED, True]]
+    ("dag_run_state", "on_failure_fail_dagrun"), [[DagRunState.SUCCESS, False], [DagRunState.FAILED, True]]
 )
 def test_teardown_failure_on_non_leaf_behaviour_on_dagrun(
     dag_maker, session, dag_run_state, on_failure_fail_dagrun
@@ -2661,7 +2714,7 @@ def test_failure_of_leaf_task_not_connected_to_teardown_task(dag_maker, session)
 
 
 @pytest.mark.parametrize(
-    "input, expected",
+    ("input", "expected"),
     [
         (["s1 >> w1 >> t1"], {"w1"}),  # t1 ignored
         (["s1 >> w1 >> t1", "s1 >> t1"], {"w1"}),  # t1 ignored; properly wired to setup
@@ -2726,7 +2779,7 @@ def test_tis_considered_for_state(dag_maker, session, input, expected):
 
 
 @pytest.mark.parametrize(
-    "pattern, run_id, result",
+    ("pattern", "run_id", "result"),
     [
         ["^[A-Z]", "ABC", True],
         ["^[A-Z]", "abc", False],
@@ -2752,7 +2805,7 @@ def test_dag_run_id_config(session, dag_maker, pattern, run_id, result):
         if result:
             dag_maker.create_dagrun(run_id=run_id, run_type=run_type)
         else:
-            with pytest.raises(ValueError):
+            with pytest.raises(ValueError, match=r"The run_id provided '.+' does not match regex pattern"):
                 dag_maker.create_dagrun(run_id=run_id, run_type=run_type)
 
 

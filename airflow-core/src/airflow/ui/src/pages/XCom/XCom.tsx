@@ -16,10 +16,9 @@
  * specific language governing permissions and limitations
  * under the License.
  */
-import { Box, Heading, Link, Flex, ButtonGroup, IconButton, useDisclosure } from "@chakra-ui/react";
+import { Box, Heading, Link, Flex, useDisclosure } from "@chakra-ui/react";
 import type { ColumnDef } from "@tanstack/react-table";
 import { useTranslation } from "react-i18next";
-import { MdCompress, MdExpand } from "react-icons/md";
 import { Link as RouterLink, useParams, useSearchParams } from "react-router-dom";
 
 import { useXcomServiceGetXcomEntries } from "openapi/queries";
@@ -27,6 +26,8 @@ import type { XComResponse } from "openapi/requests/types.gen";
 import { DataTable } from "src/components/DataTable";
 import { useTableURLState } from "src/components/DataTable/useTableUrlState";
 import { ErrorAlert } from "src/components/ErrorAlert";
+import { ExpandCollapseButtons } from "src/components/ExpandCollapseButtons";
+import Time from "src/components/Time";
 import { TruncatedText } from "src/components/TruncatedText";
 import { SearchParamsKeys, type SearchParamsKeysType } from "src/constants/searchParams";
 import { getTaskInstanceLink } from "src/utils/links";
@@ -71,7 +72,7 @@ const columns = (translate: (key: string) => string, open: boolean): Array<Colum
     header: translate("common:runId"),
   },
   {
-    accessorKey: "task_id",
+    accessorKey: "task_display_name",
     cell: ({ row: { original } }: { row: { original: XComResponse } }) => (
       <Link asChild color="fg.info" fontWeight="bold">
         <RouterLink
@@ -82,17 +83,23 @@ const columns = (translate: (key: string) => string, open: boolean): Array<Colum
             taskId: original.task_id,
           })}
         >
-          <TruncatedText text={original.task_id} />
+          <TruncatedText text={original.task_display_name} />
         </RouterLink>
       </Link>
     ),
     enableSorting: false,
-    header: translate("common:taskId"),
+    header: translate("common:task_one"),
   },
   {
     accessorKey: "map_index",
     enableSorting: false,
     header: translate("common:mapIndex"),
+  },
+  {
+    accessorKey: "timestamp",
+    cell: ({ row: { original } }) => <Time datetime={original.timestamp} />,
+    enableSorting: false,
+    header: translate("dashboard:timestamp"),
   },
   {
     cell: ({ row: { original } }) => (
@@ -162,22 +169,12 @@ export const XCom = () => {
 
       <Flex alignItems="center" justifyContent="space-between">
         <XComFilters />
-        <ButtonGroup attached mt="1" size="sm" variant="surface">
-          <IconButton
-            aria-label={translate("auditLog.actions.expandAllExtra")}
-            onClick={onOpen}
-            title={translate("auditLog.actions.expandAllExtra")}
-          >
-            <MdExpand />
-          </IconButton>
-          <IconButton
-            aria-label={translate("auditLog.actions.collapseAllExtra")}
-            onClick={onClose}
-            title={translate("auditLog.actions.collapseAllExtra")}
-          >
-            <MdCompress />
-          </IconButton>
-        </ButtonGroup>
+        <ExpandCollapseButtons
+          collapseLabel={translate("auditLog.actions.collapseAllExtra")}
+          expandLabel={translate("auditLog.actions.expandAllExtra")}
+          onCollapse={onClose}
+          onExpand={onOpen}
+        />
       </Flex>
 
       <ErrorAlert error={error} />

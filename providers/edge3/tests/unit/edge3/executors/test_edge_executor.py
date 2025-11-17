@@ -25,10 +25,10 @@ import time_machine
 
 from airflow.configuration import conf
 from airflow.models.taskinstancekey import TaskInstanceKey
+from airflow.providers.common.compat.sdk import timezone
 from airflow.providers.edge3.executors.edge_executor import EdgeExecutor
 from airflow.providers.edge3.models.edge_job import EdgeJobModel
 from airflow.providers.edge3.models.edge_worker import EdgeWorkerModel, EdgeWorkerState
-from airflow.utils import timezone
 from airflow.utils.session import create_session
 from airflow.utils.state import TaskInstanceState
 
@@ -62,12 +62,12 @@ class TestEdgeExecutor:
     def test__process_tasks_bad_command(self):
         executor, key = self.get_test_executor()
         task_tuple = (key, ["hello", "world"], None, None)
-        with pytest.raises(ValueError):
+        with pytest.raises(ValueError, match="The command must start with "):
             executor._process_tasks([task_tuple])
 
     @pytest.mark.skipif(AIRFLOW_V_3_0_PLUS, reason="_process_tasks is not used in Airflow 3.0+")
     @pytest.mark.parametrize(
-        "pool_slots, expected_concurrency",
+        ("pool_slots", "expected_concurrency"),
         [
             pytest.param(1, 1, id="default_pool_size"),
             pytest.param(5, 5, id="increased_pool_size"),

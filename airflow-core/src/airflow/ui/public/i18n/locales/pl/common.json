@@ -69,6 +69,7 @@
     "dataIntervalEnd": "Koniec interwału danych",
     "dataIntervalStart": "Początek interwału danych",
     "lastSchedulingDecision": "Ostatnia decyzja harmonogramu",
+    "partitionKey": "Klucz partycji",
     "queuedAt": "Zakolejkowano o",
     "runAfter": "Wykonaj po",
     "runType": "Typ wykonania",
@@ -89,6 +90,11 @@
     "documentation": "Dokumentacja",
     "githubRepo": "Repozytorium GitHub",
     "restApiReference": "Dokuentacja REST API"
+  },
+  "download": {
+    "download": "Pobierz",
+    "hotkey": "d",
+    "tooltip": "Naciśnij {{hotkey}}, aby pobrać logi"
   },
   "duration": "Czas trwania",
   "endDate": "Data zakończenia",
@@ -113,6 +119,8 @@
   },
   "filter": "Filtr",
   "filters": {
+    "durationFrom": "Czas trwania od",
+    "durationTo": "Czas trwania do",
     "logicalDateFrom": "Data logiczna od",
     "logicalDateTo": "Data logiczna do",
     "runAfterFrom": "Uruchom po (od)",
@@ -175,7 +183,6 @@
     },
     "tooltip": "Naciśnij {{hotkey}}, aby przewinąć do {{direction}}"
   },
-  "seconds": "{{count}}s",
   "security": {
     "actions": "Akcje",
     "permissions": "Uprawnienia",
